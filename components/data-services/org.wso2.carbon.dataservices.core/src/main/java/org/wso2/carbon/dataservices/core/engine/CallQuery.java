@@ -27,6 +27,7 @@ import org.wso2.carbon.dataservices.common.DBConstants.FaultCodes;
 import org.wso2.carbon.dataservices.core.DBUtils;
 import org.wso2.carbon.dataservices.core.DataServiceFault;
 import org.wso2.carbon.dataservices.core.description.query.Query;
+import org.wso2.carbon.dataservices.core.description.query.SQLQuery;
 
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -303,9 +304,13 @@ public class CallQuery extends OutputElement {
 	 */
 	private Map<String, ParamValue> extractParams(ExternalParamCollection params)
 			throws DataServiceFault {
+		Map<String, QueryParam> queryParamMap = new HashMap<String, QueryParam>();
 		Map<String, ParamValue> qparams = new HashMap<String, ParamValue>();
 		ExternalParam paramObj;
 		String paramType, paramName;
+		for(QueryParam queryParam : this.getQuery().getQueryParams()){
+			queryParamMap.put(queryParam.getName().toLowerCase(),queryParam);
+		}
 		for (WithParam withParam : this.getWithParams().values()) {
 			paramName = withParam.getParam();
 			paramType = withParam.getParamType();
@@ -318,6 +323,9 @@ public class CallQuery extends OutputElement {
 			    qparams.put(withParam.getName(), paramObj.getValue());
 			} else if (params.getTempEntries().containsKey(withParam.getName())) {
 				/* this means the query param will be added later by the default values */
+				continue;
+			} else if(queryParamMap.get(paramName) != null && queryParamMap.get(paramName).isOptional()
+					&& ((SQLQuery) this.getQuery()).getQuery().startsWith("update") ){
 				continue;
 			} else {
 				throw new DataServiceFault(FaultCodes.INCOMPATIBLE_PARAMETERS_ERROR,

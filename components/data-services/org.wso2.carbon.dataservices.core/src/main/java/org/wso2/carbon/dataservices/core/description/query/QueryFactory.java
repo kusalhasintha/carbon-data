@@ -1071,9 +1071,10 @@ public class QueryFactory {
 		OMElement paramEl;
 		String name, sqlType, type, paramType, ordinalStr, defaultValue, structType;
 		int ordinal, currentTmpOrdinal = 0;
-		
+		boolean isOptional = false;
 		while (paramItr.hasNext()) {
 			paramEl = paramItr.next();
+			isOptional = false;
 			name = paramEl.getAttributeValue(new QName(DBSFields.NAME));
             if (name != null) {
                 name = name.trim();
@@ -1100,14 +1101,16 @@ public class QueryFactory {
 			List<Validator> validators = getValidators(paramType, paramEl);
             /* retrieve struct type  */
             structType = paramEl.getAttributeValue(new QName(DBSFields.STRUCT_TYPE));
-			queryParams.add(new QueryParam(name, sqlType, type, paramType, ordinal,
+			if(paramEl.getAttributeValue(new QName(DBSFields.OPTIONAL)) != null){
+				isOptional = Boolean.parseBoolean(paramEl.getAttributeValue(new QName(DBSFields.OPTIONAL)));
+			}
+            queryParams.add(new QueryParam(name, sqlType, type, paramType, ordinal,
                     defaultValue == null ? null : new ParamValue(defaultValue), structType,
-                    validators));
+                    validators,isOptional));
 		}
 		
 		return queryParams;
 	}
-	
 	private static List<Validator> getValidators(String paramType,
 			OMElement paramEl) throws DataServiceFault {
 		/* add basic validators to check scalar, array etc.. */

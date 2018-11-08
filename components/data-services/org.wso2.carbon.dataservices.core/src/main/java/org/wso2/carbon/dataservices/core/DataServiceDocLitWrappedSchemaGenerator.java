@@ -30,6 +30,7 @@ import org.apache.ws.commons.schema.utils.NamespaceMap;
 import org.wso2.carbon.dataservices.common.DBConstants;
 import org.wso2.carbon.dataservices.common.DBConstants.ResultTypes;
 import org.wso2.carbon.dataservices.core.description.operation.Operation;
+import org.wso2.carbon.dataservices.core.description.query.ExpressionQuery;
 import org.wso2.carbon.dataservices.core.description.query.Query;
 import org.wso2.carbon.dataservices.core.description.resource.Resource;
 import org.wso2.carbon.dataservices.core.description.resource.Resource.ResourceID;
@@ -126,7 +127,7 @@ public class DataServiceDocLitWrappedSchemaGenerator {
      * @param cparams The common parameters used in the schema generator
      * @param request The request to be processed
      */
-    private static void processRequestBox(CommonParams cparams, CallableRequest request, List<List<CallableRequest>> allOps)
+    private static void processRequestBox(CommonParams cparams,CallableRequest request, List<List<CallableRequest>> allOps)
             throws DataServiceFault {
 		/* process input parameters */
         processRequestBoxInput(cparams, request, allOps);
@@ -211,6 +212,7 @@ public class DataServiceDocLitWrappedSchemaGenerator {
 		AxisOperation axisOp = cparams.getAxisService().getOperation(new QName(requestName));
 		CallQuery callQuery = request.getCallQuery();
 		Query query = callQuery.getQuery();
+		boolean optional = false;
 		AxisMessage inMessage = axisOp.getMessage(WSDLConstants.MESSAGE_LABEL_IN_VALUE);
 		if (inMessage != null) {
                 inMessage.setName(requestName + Java2WSDLConstants.MESSAGE_SUFFIX);
@@ -255,9 +257,14 @@ public class DataServiceDocLitWrappedSchemaGenerator {
                                 }
                                 tmpEl = createInputEntryElement(cparams, query, queryParam,
                                         tmpWithParam);
+								if(((ExpressionQuery)query).getQuery().startsWith("update") && queryParam.isOptional()){
+									optional=true;
+								}else{
+									optional=false;
+								}
                                 /* add to input element complex type */
                                 addElementToComplexTypeSequence(cparams, inputComplexType,
-                                        query.getInputNamespace(), tmpEl, false, false, false);
+                                        query.getInputNamespace(), tmpEl, false, false, optional);
                             }
                         }
                     } else {
