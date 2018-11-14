@@ -315,7 +315,13 @@ public class CallQuery extends OutputElement {
 				paramObj = params.getParam(paramName);
 			}
 			if (paramObj != null) {
-			    qparams.put(withParam.getName(), paramObj.getValue());
+				if(paramObj.getValue().getScalarValue() ==  null ||(paramObj.getValue().getScalarValue().equals("") &&
+						params.getTempEntries().containsKey(withParam.getName()))){
+					continue;
+				}
+				else {
+					qparams.put(withParam.getName(), paramObj.getValue());
+				}
 			} else if (params.getTempEntries().containsKey(withParam.getName())) {
 				/* this means the query param will be added later by the default values */
 				continue;
