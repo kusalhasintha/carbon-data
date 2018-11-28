@@ -78,7 +78,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-
+import java.util.regex.Pattern;
 /**
  * This class represents an SQL query in a data service.
  */
@@ -1380,6 +1380,41 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
     private PreparedStatement createProcessedPreparedStatement(int queryType,
             InternalParamCollection params, Connection conn) throws DataServiceFault {
         try {
+            /*Creating a new update query based on the parameters passed in the payload, checking whether the missing
+             parameters are optional*/
+            String query = this.getQuery();
+            query = query.replaceAll("(\\s+),",",");
+
+            if (query.startsWith("update")) {
+                for (QueryParam queryParam : this.getQueryParams()) {
+                    if (queryParam.isOptional() && params.getParam(queryParam.getOrdinal()) == null) {
+                        if (query.contains(queryParam.getName() + "=?,")) {
+                            query = query.replace(queryParam.getName() + "=?,", "");
+                        } else if (query.contains(queryParam.getName() + "=?")) {
+                            query = query.replace(queryParam.getName() + "=?", "");
+                        }
+                    }
+                }
+            }
+
+//            Pattern p = Pattern.compile(".*\\s*[,]\\s*(where)\\s*.*");
+            Pattern p = Pattern.compile(".*\\s*[,]\\s*(where)\\s*.*");//[,]\s*(where)
+
+            while(p.matcher(query).matches()){
+                query=query.replaceFirst("[,]\\s*(where)"," where");
+                query.replaceFirst("[,]\\s*(where)"," where");
+            }
+
+//            p.matcher(query).matches();
+//
+//            String s =query.replaceFirst("[,]\\s*(where)","where");
+//            s.replaceFirst("[,]\\s*(where)","where");
+
+
+            String paramsStr1 = "";
+            for (int i = 1; i <= this.getParamCount(); i++) {
+                paramsStr1 = paramsStr1 + params.getParam(i) + ",";
+            }
             /*
              * lets see first if there's already a batch prepared statement
              * created
@@ -1391,7 +1426,7 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             /* create a new prepared statement */
             if (stmt == null) {
                 /* batch mode is not supported for dynamic queries */
-                Object[] result = this.processDynamicQuery(this.getQuery(), params);
+                Object[] result = this.processDynamicQuery(query, params);
                 String dynamicSQL = (String) result[0];
                 currentParamCount = (Integer) result[1];
                 String processedSQL = this.createProcessedQuery(dynamicSQL, params, currentParamCount);
@@ -1467,24 +1502,26 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             ParamValue value;
             for (int i = 1; i <= currentParamCount; i++) {
                 param = params.getParam(i);
-                value = param.getValue();
-                /*
-                 * handle array values, if value is null, this param has to be
-                 * an OUT param
-                 */
-                param.setOrdinal(currentOrdinal + 1);
-                if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
-                    for (ParamValue arrayElement : value.getArrayValue()) {
-                        this.setParamInPreparedStatement(
-                                stmt, param, arrayElement == null ? null : arrayElement.toString(),
-                                queryType, currentOrdinal);
+                if (params.getParam(i) != null) {
+                    value = param.getValue();
+                    /*
+                     * handle array values, if value is null, this param has to be
+                     * an OUT param
+                     */
+                    param.setOrdinal(currentOrdinal + 1);
+                    if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
+                        for (ParamValue arrayElement : value.getArrayValue()) {
+                            this.setParamInPreparedStatement(
+                                    stmt, param, arrayElement == null ? null : arrayElement.toString(),
+                                    queryType, currentOrdinal);
+                            currentOrdinal++;
+                        }
+                    } else { /* scalar value */
+                        this.setParamInPreparedStatement(stmt, param,
+                                value != null ? value.getScalarValue() : null, queryType,
+                                currentOrdinal);
                         currentOrdinal++;
                     }
-                } else { /* scalar value */
-                    this.setParamInPreparedStatement(stmt, param,
-                            value != null ? value.getScalarValue() : null, queryType,
-                            currentOrdinal);
-                    currentOrdinal++;
                 }
             }
 

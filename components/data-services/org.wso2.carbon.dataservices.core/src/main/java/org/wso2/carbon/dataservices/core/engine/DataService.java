@@ -643,8 +643,10 @@ public class DataService {
                 *      So to overcome this, all the parameter names (the result itself is a parameter
                 *      for output elements(static elements, call queries)), are lower cased before passed in.
                 */
-            epc.addParam(new ExternalParam(entry.getKey().toLowerCase(), entry.getValue(),
-                    DBSFields.QUERY_PARAM));
+            if(entry.getValue().toString() != null){
+                epc.addParam(new ExternalParam(entry.getKey().toLowerCase(), entry.getValue(),
+                        DBSFields.QUERY_PARAM));
+            }
         }
         return epc;
     }
