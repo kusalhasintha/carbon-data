@@ -78,6 +78,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.regex.Pattern;
 
 /**
  * This class represents an SQL query in a data service.
@@ -1380,6 +1381,26 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
     private PreparedStatement createProcessedPreparedStatement(int queryType,
             InternalParamCollection params, Connection conn) throws DataServiceFault {
         try {
+            /*Creating a new update query based on the parameters passed in the payload, checking whether the missing
+             parameters are optional*/
+            String query = this.getQuery();
+
+            boolean hasOptional =false;
+            for (QueryParam queryParam : this.getQueryParams()) {
+                if(queryParam.isOptional()){
+                    hasOptional=true;
+                    break;
+                }
+            }
+
+            if (query.startsWith("update") && hasOptional) {
+                query = generateSQLupdateQuery(params, query);
+            }
+
+            String paramsStr1 = "";
+            for (int i = 1; i <= this.getParamCount(); i++) {
+                paramsStr1 = paramsStr1 + params.getParam(i) + ",";
+            }
             /*
              * lets see first if there's already a batch prepared statement
              * created
@@ -1391,7 +1412,7 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             /* create a new prepared statement */
             if (stmt == null) {
                 /* batch mode is not supported for dynamic queries */
-                Object[] result = this.processDynamicQuery(this.getQuery(), params);
+                Object[] result = this.processDynamicQuery(query, params);
                 String dynamicSQL = (String) result[0];
                 currentParamCount = (Integer) result[1];
                 String processedSQL = this.createProcessedQuery(dynamicSQL, params, currentParamCount);
@@ -1467,24 +1488,26 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             ParamValue value;
             for (int i = 1; i <= currentParamCount; i++) {
                 param = params.getParam(i);
-                value = param.getValue();
-                /*
-                 * handle array values, if value is null, this param has to be
-                 * an OUT param
-                 */
-                param.setOrdinal(currentOrdinal + 1);
-                if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
-                    for (ParamValue arrayElement : value.getArrayValue()) {
-                        this.setParamInPreparedStatement(
-                                stmt, param, arrayElement == null ? null : arrayElement.toString(),
-                                queryType, currentOrdinal);
+                if (params.getParam(i) != null) {
+                    value = param.getValue();
+                    /*
+                     * handle array values, if value is null, this param has to be
+                     * an OUT param
+                     */
+                    param.setOrdinal(currentOrdinal + 1);
+                    if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
+                        for (ParamValue arrayElement : value.getArrayValue()) {
+                            this.setParamInPreparedStatement(
+                                    stmt, param, arrayElement == null ? null : arrayElement.toString(),
+                                    queryType, currentOrdinal);
+                            currentOrdinal++;
+                        }
+                    } else { /* scalar value */
+                        this.setParamInPreparedStatement(stmt, param,
+                                value != null ? value.getScalarValue() : null, queryType,
+                                currentOrdinal);
                         currentOrdinal++;
                     }
-                } else { /* scalar value */
-                    this.setParamInPreparedStatement(stmt, param,
-                            value != null ? value.getScalarValue() : null, queryType,
-                            currentOrdinal);
-                    currentOrdinal++;
                 }
             }
 
@@ -1497,6 +1520,32 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         } catch (SQLException e) {
             throw new DataServiceFault(e, "Error in 'createProcessedPreparedStatement'");
         }
+    }
+
+    private String generateSQLupdateQuery(InternalParamCollection params, String query) {
+
+        String tableName = query.split("\\s")[1];
+        int indexOfWhere = query.indexOf("where");
+        String queryAfterWhere = query.substring(indexOfWhere + 5);
+        boolean containsRefrenceName = false;
+        String referanceName = "";
+        String updateFeilds = "";
+
+        if (!"set".equalsIgnoreCase(query.split("\\s")[2])) {
+            containsRefrenceName = true;
+            referanceName = query.split("\\s")[3];
+        }
+
+        for (InternalParam param : params.getParams()) {
+            if (containsRefrenceName) {
+                updateFeilds += " " + referanceName + "." + param.getName() + " =? ,";
+            } else {
+                updateFeilds += " " + param.getName() + " =? ,";
+            }
+        }
+        updateFeilds = updateFeilds.substring(0, updateFeilds.lastIndexOf(","));
+        query = "Update " + tableName + " set " + updateFeilds + " where " + queryAfterWhere;
+        return query;
     }
 
     private void setParamInPreparedStatement(PreparedStatement stmt, InternalParam param,
