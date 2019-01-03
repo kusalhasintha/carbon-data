@@ -74,7 +74,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -1526,10 +1528,34 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
 
         String tableName = query.split("\\s")[1];
         int indexOfWhere = query.indexOf("where");
+        int indexOfSet = query.indexOf("set");
+        String hardCodedQuery = "";
         String queryAfterWhere = query.substring(indexOfWhere + 5);
         boolean containsRefrenceName = false;
         String referanceName = "";
         String updateFeilds = "";
+
+
+        ArrayList<String> queryDefinedFeilds = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet+3,
+                indexOfWhere).replaceAll(" ","").split(",")));
+
+        ArrayList<String> queryDefinedColumns = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet+3,
+                indexOfWhere).replaceAll(" ","").split(",")));
+
+        Iterator<String> iter = queryDefinedFeilds.iterator();
+
+        while (iter.hasNext()) {
+            String col = iter.next();
+            if(col.contains("?")){
+                queryDefinedColumns.remove(col);
+            }
+        }
+
+        if(!queryDefinedColumns.isEmpty()){
+            for(String col : queryDefinedColumns){
+                hardCodedQuery += col + ", ";
+            }
+        }
 
         if (!"set".equalsIgnoreCase(query.split("\\s")[2])) {
             containsRefrenceName = true;
@@ -1537,14 +1563,17 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         }
 
         for (InternalParam param : params.getParams()) {
-            if (containsRefrenceName) {
-                updateFeilds += " " + referanceName + "." + param.getName() + " =? ,";
-            } else {
-                updateFeilds += " " + param.getName() + " =? ,";
+            if(queryDefinedFeilds.contains(param.getName()+"=?") && (queryDefinedColumns.isEmpty() || !queryDefinedColumns.contains(param.getName()+"=?"))) {
+                if (containsRefrenceName) {
+                    updateFeilds += " " + referanceName + "." + param.getName() + " =? ,";
+                } else {
+                    updateFeilds += " " + param.getName() + " =? ,";
+                }
             }
         }
+        updateFeilds += " " +hardCodedQuery;
         updateFeilds = updateFeilds.substring(0, updateFeilds.lastIndexOf(","));
-        query = "Update " + tableName + " set " + updateFeilds + " where " + queryAfterWhere;
+        query = "Update " + tableName + " set " + updateFeilds  + " where " + queryAfterWhere;
         return query;
     }
 
