@@ -1534,27 +1534,20 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         boolean containsRefrenceName = false;
         String referanceName = "";
         String updateFeilds = "";
-
-
-        ArrayList<String> queryDefinedFeilds = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet+3,
-                indexOfWhere).replaceAll(" ","").split(",")));
-
-        ArrayList<String> queryDefinedColumns = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet+3,
-                indexOfWhere).replaceAll(" ","").split(",")));
-
-        Iterator<String> iter = queryDefinedFeilds.iterator();
+        ArrayList<String> definedColumnsInQuery = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet + 3,
+                indexOfWhere).split(",")));
+        ArrayList<String> feildsInQuery = new ArrayList<>(definedColumnsInQuery);
+        Iterator<String> iter = definedColumnsInQuery.iterator();
 
         while (iter.hasNext()) {
             String col = iter.next();
-            if(col.contains("?")){
-                queryDefinedColumns.remove(col);
+            if (col.contains("?")) {
+                iter.remove();//conatains hard coded query after removing parameter requiring values.
             }
         }
 
-        if(!queryDefinedColumns.isEmpty()){
-            for(String col : queryDefinedColumns){
-                hardCodedQuery += col + ", ";
-            }
+        while (iter.hasNext()) {
+            hardCodedQuery += iter.next() + ", ";
         }
 
         if (!"set".equalsIgnoreCase(query.split("\\s")[2])) {
@@ -1563,7 +1556,7 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         }
 
         for (InternalParam param : params.getParams()) {
-            if(queryDefinedFeilds.contains(param.getName()+"=?") && (queryDefinedColumns.isEmpty() || !queryDefinedColumns.contains(param.getName()+"=?"))) {
+            if (feildsInQuery.contains(param.getName() + "=?")) {
                 if (containsRefrenceName) {
                     updateFeilds += " " + referanceName + "." + param.getName() + " =? ,";
                 } else {
@@ -1571,9 +1564,9 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
                 }
             }
         }
-        updateFeilds += " " +hardCodedQuery;
+        updateFeilds += " " + hardCodedQuery;
         updateFeilds = updateFeilds.substring(0, updateFeilds.lastIndexOf(","));
-        query = "Update " + tableName + " set " + updateFeilds  + " where " + queryAfterWhere;
+        query = "Update " + tableName + " set " + updateFeilds + " where " + queryAfterWhere;
         return query;
     }
 
