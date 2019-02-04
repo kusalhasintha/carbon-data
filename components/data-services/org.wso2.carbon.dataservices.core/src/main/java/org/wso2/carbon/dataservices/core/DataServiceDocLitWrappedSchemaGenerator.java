@@ -258,7 +258,7 @@ public class DataServiceDocLitWrappedSchemaGenerator {
                                 tmpEl = createInputEntryElement(cparams, query, queryParam,
                                         tmpWithParam);
 								/* checking if query is SQL update query and for optional parameters*/
-								if (callQuery.getQuery().getClass().toString().contains("SQLQuery")
+								if (callQuery.getQuery() instanceof SQLQuery
 										&& ((SQLQuery) query).getQuery().startsWith("update")
 										&& queryParam.isOptional()) {
 									optional = true;
