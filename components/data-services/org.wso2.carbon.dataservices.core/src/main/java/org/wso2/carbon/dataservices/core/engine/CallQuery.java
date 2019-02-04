@@ -330,16 +330,10 @@ public class CallQuery extends OutputElement {
 				/* this means the query param will be added later by the default values */
 				continue;
 			} else if (queryParamMap.get(paramName) != null
-					&& this.getQuery() instanceof SQLQuery){
-                    if(SQLQuery.sqlQueryType(((SQLQuery)this.query).getQuery()) == SQLQuery.QueryType.UPDATE
-							//TODO
-							// maintain
-							// query
-					// type in
-                    // SQLQuery class
+					&& this.getQuery().getClass().toString().contains("SQLQuery")
+					&& ((SQLQuery) this.getQuery()).getQuery().startsWith("update")
 					&& queryParamMap.get(paramName).isOptional()) {
-						continue;
-					}
+				continue;
 			} else {
 				throw new DataServiceFault(FaultCodes.INCOMPATIBLE_PARAMETERS_ERROR,
 						"Error in 'CallQuery.extractParams', cannot find parameter with type:" +
