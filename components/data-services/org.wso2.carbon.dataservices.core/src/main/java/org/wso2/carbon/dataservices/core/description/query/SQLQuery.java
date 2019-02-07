@@ -45,6 +45,7 @@ import org.wso2.carbon.dataservices.core.engine.ParamValue;
 import org.wso2.carbon.dataservices.core.engine.QueryParam;
 import org.wso2.carbon.dataservices.core.engine.Result;
 import org.wso2.carbon.dataservices.core.engine.ResultSetWrapper;
+import org.wso2.carbon.dataservices.core.sqlparser.LexicalConstants;
 
 import javax.xml.stream.XMLStreamWriter;
 import java.io.BufferedReader;
@@ -80,7 +81,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.regex.Pattern;
+
 
 /**
  * This class represents an SQL query in a data service.
@@ -149,6 +150,8 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
 
     private boolean timeConvertEnabled = true;
 
+    private static QueryType sqlQueryType;
+
     /**
      * thread local variable to keep the ordinal of the ref cursor if there is any
      */
@@ -194,6 +197,8 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
     @Override
     public void init(String query) throws DataServiceFault {
         super.init(query);
+        /*check for the type of query executed ie: UPDATE, INSERT, DELETE, SELECT*/
+        this.setSqlQueryType(query);
         /* process the advanced/additional properties */
         this.processAdvancedProps(this.getAdvancedProperties());
         this.queryType = this.retrieveQueryType(this.getQuery());
@@ -1395,7 +1400,7 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
                 }
             }
 
-            if (query.startsWith("update") && hasOptional) {
+            if (getSqlQueryType() == QueryType.UPDATE && hasOptional) {
                 query = generateSQLupdateQuery(params, query);
             }
 
@@ -1526,48 +1531,86 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
 
     private String generateSQLupdateQuery(InternalParamCollection params, String query) {
 
-        String tableName = query.split("\\s")[1];
-        int indexOfWhere = query.indexOf("where");
-        int indexOfSet = query.indexOf("set");
-        String hardCodedQuery = "";
-        String queryAfterWhere = query.substring(indexOfWhere + 5);
-        boolean containsRefrenceName = false;
         String referanceName = "";
-        String updateFeilds = "";
-        ArrayList<String> definedColumnsInQuery = new ArrayList<String>(Arrays.asList(query.substring(indexOfSet + 3,
-                indexOfWhere).split(",")));
-        ArrayList<String> feildsInQuery = new ArrayList<>(definedColumnsInQuery);
-        Iterator<String> iter = definedColumnsInQuery.iterator();
+        String userDefinedColumnsInQuery = "";
+        boolean containsRefrenceName = false;
+        StringBuilder updateFeilds = new StringBuilder();
+        StringBuilder sqlQuery = new StringBuilder();
+        String tableName = query.split("\\s")[1];
+        ArrayList<String> definedColumnsInQuery;
+        ArrayList<String> columnsInQuery;
+        Iterator<String> iter;
+        boolean isHavingWhereClause = false;
+        String queryAfterWhere = "";
+        int indexOfWhere;
+        int indexOfSet;
+
+        indexOfWhere = query.indexOf(LexicalConstants.WHERE);
+        if (indexOfWhere == -1) {
+            indexOfWhere = query.indexOf(LexicalConstants.WHERE.toLowerCase());
+        }
+        if (indexOfWhere != -1) {
+            isHavingWhereClause = true;
+            queryAfterWhere = query.substring(indexOfWhere + 5);
+        }
+        indexOfSet = query.indexOf(LexicalConstants.SET);
+        if (indexOfSet == -1) {
+            indexOfSet = query.indexOf(LexicalConstants.SET.toLowerCase());
+        }
+        if (!isHavingWhereClause) {
+            indexOfWhere = query.length();
+        }
+
+        definedColumnsInQuery = new ArrayList<String>(
+                Arrays.asList(query.substring(indexOfSet + 3, indexOfWhere).replaceAll(" ", "").split(",")));
+        columnsInQuery = new ArrayList<>(definedColumnsInQuery);//obtaining columns to be updated to an array list.
+        iter = definedColumnsInQuery.iterator();
 
         while (iter.hasNext()) {
             String col = iter.next();
-            if (col.contains("?")) {
-                iter.remove();//conatains hard coded query after removing parameter requiring values.
+            if (col.contains("?")) {//all columns reqiring parameters are defined as "FirstName=?" therefore user
+                // parameter requiring columns can be removed and the explicitly defined update column swill remain
+                // in the list and can be add later at the end of the query.
+                iter.remove();
             }
         }
 
         while (iter.hasNext()) {
-            hardCodedQuery += iter.next() + ", ";
+            userDefinedColumnsInQuery += iter.next() + ", ";//adding explicitly defined update columns and values
         }
 
-        if (!"set".equalsIgnoreCase(query.split("\\s")[2])) {
+        if (!LexicalConstants.SET.equalsIgnoreCase(query.split("\\s")[2])) {//obataining the referance name to the
+            // table if provided in the query
             containsRefrenceName = true;
             referanceName = query.split("\\s")[3];
         }
 
         for (InternalParam param : params.getParams()) {
-            if (feildsInQuery.contains(param.getName() + "=?")) {
+            if (columnsInQuery.contains(param.getName() + "=?")) {//checking if the user provided parameter is given
+                // in the list of parameters to be updated
                 if (containsRefrenceName) {
-                    updateFeilds += " " + referanceName + "." + param.getName() + " =? ,";
+                    updateFeilds.append(" " + referanceName + "." + param.getName() + " =? ,");//adding update
+                    // columns to the update string
                 } else {
-                    updateFeilds += " " + param.getName() + " =? ,";
+                    updateFeilds.append(" " + param.getName() + " =? ,");
                 }
             }
         }
-        updateFeilds += " " + hardCodedQuery;
-        updateFeilds = updateFeilds.substring(0, updateFeilds.lastIndexOf(","));
-        query = "Update " + tableName + " set " + updateFeilds + " where " + queryAfterWhere;
-        return query;
+        updateFeilds.append(" " + userDefinedColumnsInQuery);//adding the explicitly defined columns and values
+        updateFeilds = new StringBuilder(updateFeilds.substring(0, updateFeilds.lastIndexOf(",")));
+
+        if (isHavingWhereClause) {//checking if the user defined query contains a "WHERE" clause and adds accordingly
+            // the query part after the where clause from the user defined query
+            sqlQuery.append(query).append(LexicalConstants.UPDATE).append(" ").append(tableName)
+                    .append(LexicalConstants.SET).append(" ").append(updateFeilds).append(" ")
+                    .append(LexicalConstants.WHERE).append(queryAfterWhere);
+            return sqlQuery.toString();
+        } else {
+            sqlQuery.append(query).append(LexicalConstants.UPDATE).append(" ").append(tableName)
+                    .append(LexicalConstants.SET).append(" ").append(updateFeilds);
+            return sqlQuery.toString();
+        }
+
     }
 
     private void setParamInPreparedStatement(PreparedStatement stmt, InternalParam param,
@@ -2467,6 +2510,36 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         public int getFetchSize() {
             return fetchSize;
         }
+    }
+
+    public QueryType getSqlQueryType() { return sqlQueryType; }
+
+    public QueryType setSqlQueryType(String query) { return sqlQueryType = sqlQueryType(query); }
+
+    public static QueryType sqlQueryType(String sqlQuery){
+        String query = sqlQuery.substring(0,sqlQuery.indexOf(" ")).toUpperCase();;
+        switch (query) {
+            case "UPDATE":
+                sqlQueryType =  QueryType.UPDATE;
+                break;
+            case "SELECT":
+                sqlQueryType =  QueryType.SELECT;
+                break;
+            case "DELETE":
+                sqlQueryType =  QueryType.DELETE;
+                break;
+            case "INSERT":
+                sqlQueryType =  QueryType.INSERT;
+                break;
+        }
+        return sqlQueryType;
+    }
+
+    public enum QueryType {
+        UPDATE,
+        INSERT,
+        DELETE,
+        SELECT;
     }
 
 }

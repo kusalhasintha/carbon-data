@@ -217,10 +217,10 @@ public abstract class Query extends XMLWriterHelper {
 						continue;
 					} else {
 						if (tmpParamValue == null && !queryParam.hasDefaultValue()) {
-							/* still can't find, throw an exception */
-							throw new DataServiceFault(FaultCodes.INCOMPATIBLE_PARAMETERS_ERROR,
-									"Error in 'Query.extractParams', " +
-											"cannot find query param with name:" + queryParam.getName());
+						    /* still can't find, throw an exception */
+						    throw new DataServiceFault(FaultCodes.INCOMPATIBLE_PARAMETERS_ERROR,
+						    "Error in 'Query.extractParams', cannot find query param "+
+						          "with name:" + queryParam.getName());
 						}
 					}
 				}
