@@ -45,6 +45,7 @@ import org.wso2.carbon.dataservices.core.engine.ParamValue;
 import org.wso2.carbon.dataservices.core.engine.QueryParam;
 import org.wso2.carbon.dataservices.core.engine.Result;
 import org.wso2.carbon.dataservices.core.engine.ResultSetWrapper;
+import org.wso2.carbon.dataservices.core.sqlparser.LexicalConstants;
 
 import javax.xml.stream.XMLStreamWriter;
 import java.io.BufferedReader;
@@ -74,10 +75,13 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+
 
 /**
  * This class represents an SQL query in a data service.
@@ -146,6 +150,8 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
 
     private boolean timeConvertEnabled = true;
 
+    private static QueryType sqlQueryType;
+
     /**
      * thread local variable to keep the ordinal of the ref cursor if there is any
      */
@@ -191,6 +197,8 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
     @Override
     public void init(String query) throws DataServiceFault {
         super.init(query);
+        /*check for the type of query executed ie: UPDATE, INSERT, DELETE, SELECT*/
+        this.setSqlQueryType(query);
         /* process the advanced/additional properties */
         this.processAdvancedProps(this.getAdvancedProperties());
         this.queryType = this.retrieveQueryType(this.getQuery());
@@ -1380,6 +1388,26 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
     private PreparedStatement createProcessedPreparedStatement(int queryType,
             InternalParamCollection params, Connection conn) throws DataServiceFault {
         try {
+            /*Creating a new update query based on the parameters passed in the payload, checking whether the missing
+             parameters are optional*/
+            String query = this.getQuery();
+
+            boolean hasOptional =false;
+            for (QueryParam queryParam : this.getQueryParams()) {
+                if(queryParam.isOptional()){
+                    hasOptional=true;
+                    break;
+                }
+            }
+
+            if (getSqlQueryType() == QueryType.UPDATE && hasOptional) {
+                query = generateSQLupdateQuery(params, query);
+            }
+
+            String paramsStr1 = "";
+            for (int i = 1; i <= this.getParamCount(); i++) {
+                paramsStr1 = paramsStr1 + params.getParam(i) + ",";
+            }
             /*
              * lets see first if there's already a batch prepared statement
              * created
@@ -1391,7 +1419,7 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             /* create a new prepared statement */
             if (stmt == null) {
                 /* batch mode is not supported for dynamic queries */
-                Object[] result = this.processDynamicQuery(this.getQuery(), params);
+                Object[] result = this.processDynamicQuery(query, params);
                 String dynamicSQL = (String) result[0];
                 currentParamCount = (Integer) result[1];
                 String processedSQL = this.createProcessedQuery(dynamicSQL, params, currentParamCount);
@@ -1467,24 +1495,26 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
             ParamValue value;
             for (int i = 1; i <= currentParamCount; i++) {
                 param = params.getParam(i);
-                value = param.getValue();
-                /*
-                 * handle array values, if value is null, this param has to be
-                 * an OUT param
-                 */
-                param.setOrdinal(currentOrdinal + 1);
-                if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
-                    for (ParamValue arrayElement : value.getArrayValue()) {
-                        this.setParamInPreparedStatement(
-                                stmt, param, arrayElement == null ? null : arrayElement.toString(),
-                                queryType, currentOrdinal);
+                if (params.getParam(i) != null) {
+                    value = param.getValue();
+                    /*
+                     * handle array values, if value is null, this param has to be
+                     * an OUT param
+                     */
+                    param.setOrdinal(currentOrdinal + 1);
+                    if (value != null && value.getValueType() == ParamValue.PARAM_VALUE_ARRAY) {
+                        for (ParamValue arrayElement : value.getArrayValue()) {
+                            this.setParamInPreparedStatement(
+                                    stmt, param, arrayElement == null ? null : arrayElement.toString(),
+                                    queryType, currentOrdinal);
+                            currentOrdinal++;
+                        }
+                    } else { /* scalar value */
+                        this.setParamInPreparedStatement(stmt, param,
+                                value != null ? value.getScalarValue() : null, queryType,
+                                currentOrdinal);
                         currentOrdinal++;
                     }
-                } else { /* scalar value */
-                    this.setParamInPreparedStatement(stmt, param,
-                            value != null ? value.getScalarValue() : null, queryType,
-                            currentOrdinal);
-                    currentOrdinal++;
                 }
             }
 
@@ -1497,6 +1527,80 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         } catch (SQLException e) {
             throw new DataServiceFault(e, "Error in 'createProcessedPreparedStatement'");
         }
+    }
+
+    private String generateSQLupdateQuery(InternalParamCollection params, String query) {
+
+        String referanceName = "";
+        String userDefinedColumnsInQuery = "";
+        boolean containsRefrenceName = false;
+        StringBuilder updateFeilds = new StringBuilder();
+        String tableName = query.split("\\s")[1];
+        ArrayList<String> definedColumnsInQuery;
+        ArrayList<String> columnsInQuery;
+        Iterator<String> iter;
+        boolean isHavingWhereClause = false;
+        String queryAfterWhere = "";
+        int indexOfWhere;
+        int indexOfSet;
+
+        indexOfWhere = query.indexOf(LexicalConstants.WHERE);
+        if (indexOfWhere == -1) {
+            indexOfWhere = query.indexOf(LexicalConstants.WHERE.toLowerCase());
+        }
+        if (indexOfWhere != -1) {
+            isHavingWhereClause = true;
+            queryAfterWhere = query.substring(indexOfWhere + 5);//use sonarlint pluging
+        }
+        indexOfSet = query.indexOf(LexicalConstants.SET);
+        if (indexOfSet == -1) {
+            indexOfSet = query.indexOf(LexicalConstants.SET.toLowerCase());
+        }
+        if (!isHavingWhereClause) {
+            indexOfWhere = query.length();
+        }
+
+        definedColumnsInQuery = new ArrayList<String>(
+                Arrays.asList(query.substring(indexOfSet + 3, indexOfWhere).replaceAll(" ", "").split(",")));
+        columnsInQuery = new ArrayList<>(definedColumnsInQuery);
+        iter = definedColumnsInQuery.iterator();
+
+        while (iter.hasNext()) {
+            String col = iter.next();
+            if (col.contains("?")) {//remove parameter with ":"
+                iter.remove();//contains hard coded query after removing parameter requiring values.
+            }
+        }
+
+        while (iter.hasNext()) {
+            userDefinedColumnsInQuery += iter.next() + ", ";
+        }
+
+        if (!LexicalConstants.SET.equalsIgnoreCase(query.split("\\s")[2])) {
+            containsRefrenceName = true;
+            referanceName = query.split("\\s")[3];
+        }
+
+        for (InternalParam param : params.getParams()) {
+            if (columnsInQuery.contains(param.getName() + "=?")) {
+                if (containsRefrenceName) {
+                    updateFeilds.append(" " + referanceName + "." + param.getName() + " =? ,");
+                } else {
+                    updateFeilds.append(" " + param.getName() + " =? ,");
+                }
+            }
+        }
+        updateFeilds.append(" " + userDefinedColumnsInQuery);
+        updateFeilds = new StringBuilder(updateFeilds.substring(0, updateFeilds.lastIndexOf(",")));
+
+        if (isHavingWhereClause) {
+            return new StringBuilder(query = LexicalConstants.UPDATE + " " + tableName + " " + LexicalConstants.SET
+                    + " " + updateFeilds + " " + LexicalConstants.WHERE + " " + queryAfterWhere).toString();
+        } else {
+            return new StringBuilder(query = LexicalConstants.UPDATE + " " + tableName + " " + LexicalConstants.SET
+                    + " " + updateFeilds).toString();
+        }
+
     }
 
     private void setParamInPreparedStatement(PreparedStatement stmt, InternalParam param,
@@ -2396,6 +2500,36 @@ public class SQLQuery extends ExpressionQuery implements BatchRequestParticipant
         public int getFetchSize() {
             return fetchSize;
         }
+    }
+
+    public QueryType getSqlQueryType() { return sqlQueryType; }
+
+    public QueryType setSqlQueryType(String query) { return sqlQueryType = sqlQueryType(query); }
+
+    public static QueryType sqlQueryType(String sqlQuery){
+        String query = sqlQuery.substring(0,sqlQuery.indexOf(" ")).toUpperCase();;
+        switch (query) {
+            case "UPDATE":
+                sqlQueryType =  QueryType.UPDATE;
+                break;
+            case "SELECT":
+                sqlQueryType =  QueryType.SELECT;
+                break;
+            case "DELETE":
+                sqlQueryType =  QueryType.DELETE;
+                break;
+            case "INSERT":
+                sqlQueryType =  QueryType.INSERT;
+                break;
+        }
+        return sqlQueryType;
+    }
+
+    public enum QueryType {
+        UPDATE,
+        INSERT,
+        DELETE,
+        SELECT;
     }
 
 }

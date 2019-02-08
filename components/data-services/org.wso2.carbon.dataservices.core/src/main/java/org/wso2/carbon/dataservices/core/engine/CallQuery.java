@@ -24,22 +24,19 @@ import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.dataservices.common.DBConstants;
 import org.wso2.carbon.dataservices.common.DBConstants.DBSFields;
 import org.wso2.carbon.dataservices.common.DBConstants.FaultCodes;
-import org.wso2.carbon.dataservices.core.DBUtils;
 import org.wso2.carbon.dataservices.core.DataServiceFault;
 import org.wso2.carbon.dataservices.core.description.query.Query;
+import org.wso2.carbon.dataservices.core.description.query.SQLQuery;
 
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A call-query is an expression which leads to the execution of a query.
@@ -306,6 +303,10 @@ public class CallQuery extends OutputElement {
 		Map<String, ParamValue> qparams = new HashMap<String, ParamValue>();
 		ExternalParam paramObj;
 		String paramType, paramName;
+		Map<String, QueryParam> queryParamMap = new HashMap<String, QueryParam>();
+		for (QueryParam queryParam : this.getQuery().getQueryParams()) {
+			queryParamMap.put(queryParam.getName().toLowerCase(), queryParam);
+		}
 		for (WithParam withParam : this.getWithParams().values()) {
 			paramName = withParam.getParam();
 			paramType = withParam.getParamType();
@@ -315,10 +316,30 @@ public class CallQuery extends OutputElement {
 				paramObj = params.getParam(paramName);
 			}
 			if (paramObj != null) {
-			    qparams.put(withParam.getName(), paramObj.getValue());
+				if (paramObj.getValue().getScalarValue() == null
+					&& params.getTempEntries().containsKey(withParam.getName())
+					&& queryParamMap.get(paramName).isForceDefault()) {
+					/*workaround for users to set default values to parameters
+					when invoking a REST resource using GET method the loop is
+					cotinued so that the default value will be added later*/
+					continue;
+				} else {
+					qparams.put(withParam.getName(), paramObj.getValue());
+				}
 			} else if (params.getTempEntries().containsKey(withParam.getName())) {
 				/* this means the query param will be added later by the default values */
 				continue;
+			} else if (queryParamMap.get(paramName) != null
+					&& this.getQuery() instanceof SQLQuery){
+                    if(SQLQuery.sqlQueryType(((SQLQuery)this.query).getQuery()) == SQLQuery.QueryType.UPDATE
+							//TODO
+							// maintain
+							// query
+					// type in
+                    // SQLQuery class
+					&& queryParamMap.get(paramName).isOptional()) {
+						continue;
+					}
 			} else {
 				throw new DataServiceFault(FaultCodes.INCOMPATIBLE_PARAMETERS_ERROR,
 						"Error in 'CallQuery.extractParams', cannot find parameter with type:" +
