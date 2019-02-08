@@ -324,7 +324,7 @@ public abstract class ExpressionQuery extends Query {
         }
         for (int i = 1; i <= paramCount; i++) {
             tmpParam = params.getParam(i);
-            if (tmpParam == null && !(this.getQuery().startsWith("update"))) {
+            if (tmpParam == null && !(((SQLQuery)this).getSqlQueryType() == SQLQuery.QueryType.UPDATE)) {
                 throw new RuntimeException("Parameters are not Defined Correctly, missing parameter ordinal - " + i);
             }
             if (tmpParam == null && !(tempParams.get(i).isOptional())) {

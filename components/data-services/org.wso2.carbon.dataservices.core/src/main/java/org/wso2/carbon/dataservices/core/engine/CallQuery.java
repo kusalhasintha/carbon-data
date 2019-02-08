@@ -331,12 +331,7 @@ public class CallQuery extends OutputElement {
 				continue;
 			} else if (queryParamMap.get(paramName) != null
 					&& this.getQuery() instanceof SQLQuery){
-                    if(SQLQuery.sqlQueryType(((SQLQuery)this.query).getQuery()) == SQLQuery.QueryType.UPDATE
-							//TODO
-							// maintain
-							// query
-					// type in
-                    // SQLQuery class
+                    if(((SQLQuery)this.query).getSqlQueryType() == SQLQuery.QueryType.UPDATE
 					&& queryParamMap.get(paramName).isOptional()) {
 						continue;
 					}

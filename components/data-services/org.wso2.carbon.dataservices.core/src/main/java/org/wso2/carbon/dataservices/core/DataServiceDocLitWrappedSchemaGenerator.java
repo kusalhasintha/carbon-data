@@ -259,15 +259,15 @@ public class DataServiceDocLitWrappedSchemaGenerator {
                                         tmpWithParam);
 								/* checking if query is SQL update query and for optional parameters*/
 								if (callQuery.getQuery() instanceof SQLQuery
-										&& ((SQLQuery) query).getQuery().startsWith("update")
-										&& queryParam.isOptional()) {
+									&& ((SQLQuery) query).getSqlQueryType() == SQLQuery.QueryType.UPDATE
+									&& queryParam.isOptional()) {
 									optional = true;
 								} else {
 									optional = false;
 								}
                                 /* add to input element complex type */
-                                addElementToComplexTypeSequence(cparams, inputComplexType,
-                                        query.getInputNamespace(), tmpEl, false, false, optional);
+								addElementToComplexTypeSequence(cparams, inputComplexType,query.getInputNamespace(),
+										tmpEl, false, false, optional);
                             }
                         }
                     } else {
