@@ -310,8 +310,7 @@ public class Query extends DataServiceConfigurationElement {
 					paramElement.getAttributeValue(new QName("sqlType")),
 					paramElement.getAttributeValue(new QName("type")), userSetOrdinalValue,
 					paramElement.getAttributeValue(new QName("defaultValue")),
-					this.getValidators(paramElement.getChildren()),
-					paramElement.getAttributeValue(new QName("optional")));
+					this.getValidators(paramElement.getChildren()));
 			paramList.add(param);
 		}
 		try {

@@ -242,23 +242,21 @@ public abstract class ExpressionQuery extends Query {
         int count;
         for (int i = 1; i <= paramCount; i++) {
             param = params.getParam(i);
-            if (param != null) {
-                value = param.getValue();
-                /*
-                 * value can be null in stored proc OUT params, so it is simply
-                 * treated as a single param, because the number of elements in an
-                 * array cannot be calculated, since there's no actual value passed
-                 * in
-                 */
-                if (value != null && (value.getValueType() == ParamValue.PARAM_VALUE_ARRAY)) {
-                    count = (value.getArrayValue()).size();
-                } else {
-                    count = 1;
-                }
-                vals = this.expandQuery(start, count, currentQuery);
-                start = (Integer) vals[0];
-                currentQuery = (String) vals[1];
+            value = param.getValue();
+			/*
+			 * value can be null in stored proc OUT params, so it is simply
+			 * treated as a single param, because the number of elements in an
+			 * array cannot be calculated, since there's no actual value passed
+			 * in
+			 */
+            if (value != null && (value.getValueType() == ParamValue.PARAM_VALUE_ARRAY)) {
+                count = (value.getArrayValue()).size();
+            } else {
+                count = 1;
             }
+            vals = this.expandQuery(start, count, currentQuery);
+            start = (Integer) vals[0];
+            currentQuery = (String) vals[1];
         }
         return currentQuery;
     }
@@ -312,25 +310,18 @@ public abstract class ExpressionQuery extends Query {
      */
     protected Object[] processDynamicQuery(String query, InternalParamCollection params) {
         Integer[] paramIndices = this.extractQueryParamIndices(query);
-        Map<Integer, QueryParam> tempParams = new HashMap<>();
         int currentOrdinalDiff = 0;
         int currentParamIndexDiff = 0;
         InternalParam tmpParam;
         int paramIndex;
         String tmpValue;
         int resultParamCount = paramCount;
-        for (QueryParam queryParam : this.getQueryParams()) {
-            tempParams.put(queryParam.getOrdinal(), queryParam);
-        }
         for (int i = 1; i <= paramCount; i++) {
             tmpParam = params.getParam(i);
-            if (tmpParam == null && !(((SQLQuery)this).getSqlQueryType() == SQLQuery.QueryType.UPDATE)) {
+            if (tmpParam == null) {
                 throw new RuntimeException("Parameters are not Defined Correctly, missing parameter ordinal - " + i);
             }
-            if (tmpParam == null && !(tempParams.get(i).isOptional())) {
-                throw new RuntimeException("Parameters are not Defined Correctly, missing parameter ordinal - " + i);
-            }
-            if (tmpParam != null && !(tempParams.get(i).isOptional()) && DBConstants.DataTypes.QUERY_STRING.equals(tmpParam.getSqlType())) {
+            if (DBConstants.DataTypes.QUERY_STRING.equals(tmpParam.getSqlType())) {
                 paramIndex = paramIndices[i - 1] + currentParamIndexDiff;
                 tmpValue = params.getParam(i).getValue().getScalarValue();
                 currentParamIndexDiff += tmpValue.length() - 1;
@@ -343,11 +334,9 @@ public abstract class ExpressionQuery extends Query {
                 currentOrdinalDiff++;
                 resultParamCount--;
             } else {
-                if (params.getParam(i) != null) {
-                    params.remove(i);
-                    tmpParam.setOrdinal(i - currentOrdinalDiff);
-                    params.addParam(tmpParam);
-                }
+                params.remove(i);
+                tmpParam.setOrdinal(i - currentOrdinalDiff);
+                params.addParam(tmpParam);
             }
         }
         return new Object[] { query, resultParamCount };

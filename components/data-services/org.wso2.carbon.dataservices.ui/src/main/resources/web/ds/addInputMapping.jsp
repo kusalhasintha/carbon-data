@@ -40,7 +40,6 @@
     String defaultValue = request.getParameter("defaultValue");
     String structType = request.getParameter("structType");
     String ordinalVal = request.getParameter("inputMappingOrdinalId");
-    String optional = request.getParameter("optional");
     String caption;
     boolean isEdit = false;
     Query query = null;
@@ -65,7 +64,6 @@
             paramType = param.getParamType();
             defaultValue = param.getDefaultValue();
             structType = param.getStructType();
-            optional = param.getOptional();
             if (ordinal != 0) { //ordinal=0 when user not given a ordinal.
                 ordinalStr = Integer.toString(ordinal);
             }
@@ -80,7 +78,6 @@
     sqlType = (sqlType == null) ? "" : sqlType;
     inOutType = (inOutType == null) ? "" : inOutType;
     ordinalStr = (ordinalStr == null) ? "" : ordinalStr;
-    optional = (optional == null) ? "" : optional;
     if (!paramName.equals("")) {
         caption = "save";
     } else {
@@ -160,18 +157,6 @@
         <%} else {%>
         <option id="paramTypeArrayOptionId" disabled value="ARRAY">ARRAY</option>
         <% } %>
-        <% } %>
-    </select></td>
-</tr>
-<tr>
-    <td class="leftCol-small"><fmt:message key="dataservices.param.optional"/></td>
-    <td><select id="optionalId" name="optional">
-        <% if (optional.equalsIgnoreCase("false") || optional.equalsIgnoreCase("")) { %>
-        <option value="false" selected="selected">False</option>
-        <option value="true">True</option>
-        <% } else if (optional.equalsIgnoreCase("true")) { %>
-        <option value="true" selected="selected">True</option>
-        <option value="false">False</option>
         <% } %>
     </select></td>
 </tr>

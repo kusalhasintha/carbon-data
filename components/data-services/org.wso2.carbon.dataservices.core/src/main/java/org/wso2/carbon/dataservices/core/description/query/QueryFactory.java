@@ -1071,10 +1071,9 @@ public class QueryFactory {
 		OMElement paramEl;
 		String name, sqlType, type, paramType, ordinalStr, defaultValue, structType;
 		int ordinal, currentTmpOrdinal = 0;
-		boolean forceDefault, optional = false;
+		boolean forceDefault = false;
 		while (paramItr.hasNext()) {
-			forceDefault  = false;
-			optional  = false;
+			forceDefault = false;
 			paramEl = paramItr.next();
 			name = paramEl.getAttributeValue(new QName(DBSFields.NAME));
             if (name != null) {
@@ -1101,16 +1100,13 @@ public class QueryFactory {
 			if (paramEl.getAttributeValue(new QName(DBSFields.FORCED_DEFAULT)) != null) {
 			    forceDefault = Boolean.parseBoolean(paramEl.getAttributeValue(new QName(DBSFields.FORCED_DEFAULT)));
 			}
-			if (paramEl.getAttributeValue(new QName(DBSFields.OPTIONAL)) != null) {
-				optional = Boolean.parseBoolean(paramEl.getAttributeValue(new QName(DBSFields.OPTIONAL)));
-			}
 			/* retrieve validators */
 			List<Validator> validators = getValidators(paramType, paramEl);
             /* retrieve struct type  */
             structType = paramEl.getAttributeValue(new QName(DBSFields.STRUCT_TYPE));
 			queryParams.add(new QueryParam(name, sqlType, type, paramType, ordinal,
                     defaultValue == null ? null : new ParamValue(defaultValue), structType,
-                    validators, forceDefault, optional));
+                    validators, forceDefault));
 		}
 		
 		return queryParams;
